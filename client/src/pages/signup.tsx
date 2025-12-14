@@ -4,6 +4,7 @@ import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/api";
 import { setAuth } from "@/lib/auth";
 import { AuthResponse } from "@shared/schema";
+import SplashScreen from "@/components/splash-screen";
 
 export default function Signup() {
   const [, setLocation] = useLocation();
@@ -11,12 +12,13 @@ export default function Signup() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
+  const [showSplash, setShowSplash] = useState(false);
 
   const signupMutation = useMutation({
     mutationFn: () => apiRequest<AuthResponse>("POST", "/api/auth/signup", { username, password }),
     onSuccess: (data) => {
       setAuth(data);
-      setLocation("/");
+      setShowSplash(true);
     },
     onError: (err: Error) => {
       setError(err.message);
@@ -32,6 +34,14 @@ export default function Signup() {
     }
     signupMutation.mutate();
   };
+
+  const handleSplashComplete = () => {
+    setLocation("/");
+  };
+
+  if (showSplash) {
+    return <SplashScreen onComplete={handleSplashComplete} duration={2000} />;
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
