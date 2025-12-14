@@ -1,274 +1,278 @@
-import { 
-  type User, type InsertUser, 
+import {
+  type User, type InsertUser,
   type Post, type InsertPost,
   type Follow, type Like, type Comment, type InsertComment,
   type PostWithDetails, type UserProfile, type CommentWithUser
 } from "@shared/schema";
 import { randomUUID } from "crypto";
 
-export interface IStorage {
-  // User operations
-  getUser(id: string): Promise<User | undefined>;
-  getUserByUsername(username: string): Promise<User | undefined>;
-  createUser(user: InsertUser & { password: string }): Promise<User>;
-  
-  // Post operations
-  createPost(userId: string, post: InsertPost): Promise<Post>;
-  getPost(id: string): Promise<Post | undefined>;
-  getPostWithDetails(id: string, currentUserId: string): Promise<PostWithDetails | undefined>;
-  getPostsByUser(userId: string, currentUserId: string): Promise<PostWithDetails[]>;
-  getFeed(userId: string): Promise<PostWithDetails[]>;
-  
-  // Follow operations
-  follow(followerId: string, followingId: string): Promise<void>;
-  unfollow(followerId: string, followingId: string): Promise<void>;
-  isFollowing(followerId: string, followingId: string): Promise<boolean>;
-  getFollowerCount(userId: string): Promise<number>;
-  getFollowingCount(userId: string): Promise<number>;
-  getFollowing(userId: string): Promise<string[]>;
-  
-  // Like operations
-  likePost(userId: string, postId: string): Promise<void>;
-  unlikePost(userId: string, postId: string): Promise<void>;
-  isLiked(userId: string, postId: string): Promise<boolean>;
-  getLikeCount(postId: string): Promise<number>;
-  
-  // Comment operations
-  createComment(userId: string, postId: string, comment: InsertComment): Promise<Comment>;
-  getComments(postId: string): Promise<CommentWithUser[]>;
-  getCommentCount(postId: string): Promise<number>;
-  
-  // Profile
-  getUserProfile(username: string, currentUserId: string): Promise<UserProfile | undefined>;
+// Simple in-memory storage maps
+const users = new Map<string, User>();
+const posts = new Map<string, Post>();
+const follows = new Map<string, Follow>();
+const likes = new Map<string, Like>();
+const comments = new Map<string, Comment>();
+
+// Helper functions
+async function getUser(id: string): Promise<User | undefined> {
+  return users.get(id);
 }
 
-export class MemStorage implements IStorage {
-  private users: Map<string, User>;
-  private posts: Map<string, Post>;
-  private follows: Map<string, Follow>;
-  private likes: Map<string, Like>;
-  private comments: Map<string, Comment>;
+async function getUserByUsername(username: string): Promise<User | undefined> {
+  return Array.from(users.values()).find(
+    (user) => user.username.toLowerCase() === username.toLowerCase()
+  );
+}
 
-  constructor() {
-    this.users = new Map();
-    this.posts = new Map();
-    this.follows = new Map();
-    this.likes = new Map();
-    this.comments = new Map();
-  }
+async function createUser(insertUser: InsertUser & { password: string }): Promise<User> {
+  const id = randomUUID();
+  const user: User = {
+    id,
+    username: insertUser.username,
+    password: insertUser.password,
+    avatarUrl: insertUser.avatarUrl
+  };
+  users.set(id, user);
+  return user;
+}
 
-  // User operations
-  async getUser(id: string): Promise<User | undefined> {
-    return this.users.get(id);
-  }
+async function createPost(userId: string, insertPost: InsertPost): Promise<Post> {
+  const id = randomUUID();
+  const post: Post = {
+    id,
+    userId,
+    imageUrl: insertPost.imageUrl,
+    caption: insertPost.caption,
+    createdAt: new Date().toISOString(),
+  };
+  posts.set(id, post);
+  return post;
+}
 
-  async getUserByUsername(username: string): Promise<User | undefined> {
-    return Array.from(this.users.values()).find(
-      (user) => user.username.toLowerCase() === username.toLowerCase()
-    );
-  }
+async function getPost(id: string): Promise<Post | undefined> {
+  return posts.get(id);
+}
 
-  async createUser(insertUser: InsertUser & { password: string }): Promise<User> {
-    const id = randomUUID();
-    const user: User = { id, username: insertUser.username, password: insertUser.password };
-    this.users.set(id, user);
-    return user;
-  }
+async function getLikeCount(postId: string): Promise<number> {
+  return Array.from(likes.values()).filter((l) => l.postId === postId).length;
+}
 
-  // Post operations
-  async createPost(userId: string, insertPost: InsertPost): Promise<Post> {
-    const id = randomUUID();
-    const post: Post = {
-      id,
-      userId,
-      imageUrl: insertPost.imageUrl,
-      caption: insertPost.caption,
-      createdAt: new Date().toISOString(),
-    };
-    this.posts.set(id, post);
-    return post;
-  }
+async function getCommentCount(postId: string): Promise<number> {
+  return Array.from(comments.values()).filter((c) => c.postId === postId).length;
+}
 
-  async getPost(id: string): Promise<Post | undefined> {
-    return this.posts.get(id);
-  }
+async function isLiked(userId: string, postId: string): Promise<boolean> {
+  const key = `${userId}-${postId}`;
+  return likes.has(key);
+}
 
-  async getPostWithDetails(id: string, currentUserId: string): Promise<PostWithDetails | undefined> {
-    const post = this.posts.get(id);
-    if (!post) return undefined;
+async function getPostWithDetails(id: string, currentUserId: string): Promise<PostWithDetails | undefined> {
+  const post = posts.get(id);
+  if (!post) return undefined;
 
-    const user = await this.getUser(post.userId);
-    if (!user) return undefined;
+  const user = await getUser(post.userId);
+  if (!user) return undefined;
 
-    return {
+  return {
+    ...post,
+    username: user.username,
+    avatarUrl: user.avatarUrl,
+    likeCount: await getLikeCount(id),
+    commentCount: await getCommentCount(id),
+    isLiked: await isLiked(currentUserId, id),
+  };
+}
+
+async function getPostsByUser(userId: string, currentUserId: string): Promise<PostWithDetails[]> {
+  const user = await getUser(userId);
+  if (!user) return [];
+
+  const userPosts = Array.from(posts.values())
+    .filter((post) => post.userId === userId)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const result: PostWithDetails[] = [];
+  for (const post of userPosts) {
+    result.push({
       ...post,
       username: user.username,
-      likeCount: await this.getLikeCount(id),
-      commentCount: await this.getCommentCount(id),
-      isLiked: await this.isLiked(currentUserId, id),
-    };
+      avatarUrl: user.avatarUrl,
+      likeCount: await getLikeCount(post.id),
+      commentCount: await getCommentCount(post.id),
+      isLiked: await isLiked(currentUserId, post.id),
+    });
   }
+  return result;
+}
 
-  async getPostsByUser(userId: string, currentUserId: string): Promise<PostWithDetails[]> {
-    const user = await this.getUser(userId);
-    if (!user) return [];
+async function getFollowing(userId: string): Promise<string[]> {
+  return Array.from(follows.values())
+    .filter((f) => f.followerId === userId)
+    .map((f) => f.followingId);
+}
 
-    const posts = Array.from(this.posts.values())
-      .filter((post) => post.userId === userId)
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+async function getFeed(userId: string): Promise<PostWithDetails[]> {
+  const following = await getFollowing(userId);
 
-    const result: PostWithDetails[] = [];
-    for (const post of posts) {
+  // Include posts from users you follow AND your own posts
+  const feedPosts = Array.from(posts.values())
+    .filter((post) => following.includes(post.userId) || post.userId === userId)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const result: PostWithDetails[] = [];
+  for (const post of feedPosts) {
+    const user = await getUser(post.userId);
+    if (user) {
       result.push({
         ...post,
         username: user.username,
-        likeCount: await this.getLikeCount(post.id),
-        commentCount: await this.getCommentCount(post.id),
-        isLiked: await this.isLiked(currentUserId, post.id),
-      });
-    }
-    return result;
-  }
-
-  async getFeed(userId: string): Promise<PostWithDetails[]> {
-    const following = await this.getFollowing(userId);
-    
-    const posts = Array.from(this.posts.values())
-      .filter((post) => following.includes(post.userId))
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-
-    const result: PostWithDetails[] = [];
-    for (const post of posts) {
-      const user = await this.getUser(post.userId);
-      if (user) {
-        result.push({
-          ...post,
-          username: user.username,
-          likeCount: await this.getLikeCount(post.id),
-          commentCount: await this.getCommentCount(post.id),
-          isLiked: await this.isLiked(userId, post.id),
-        });
-      }
-    }
-    return result;
-  }
-
-  // Follow operations
-  async follow(followerId: string, followingId: string): Promise<void> {
-    if (followerId === followingId) return;
-    const key = `${followerId}-${followingId}`;
-    if (!this.follows.has(key)) {
-      this.follows.set(key, {
-        id: randomUUID(),
-        followerId,
-        followingId,
+        avatarUrl: user.avatarUrl,
+        likeCount: await getLikeCount(post.id),
+        commentCount: await getCommentCount(post.id),
+        isLiked: await isLiked(userId, post.id),
       });
     }
   }
+  return result;
+}
 
-  async unfollow(followerId: string, followingId: string): Promise<void> {
-    const key = `${followerId}-${followingId}`;
-    this.follows.delete(key);
-  }
-
-  async isFollowing(followerId: string, followingId: string): Promise<boolean> {
-    const key = `${followerId}-${followingId}`;
-    return this.follows.has(key);
-  }
-
-  async getFollowerCount(userId: string): Promise<number> {
-    return Array.from(this.follows.values()).filter((f) => f.followingId === userId).length;
-  }
-
-  async getFollowingCount(userId: string): Promise<number> {
-    return Array.from(this.follows.values()).filter((f) => f.followerId === userId).length;
-  }
-
-  async getFollowing(userId: string): Promise<string[]> {
-    return Array.from(this.follows.values())
-      .filter((f) => f.followerId === userId)
-      .map((f) => f.followingId);
-  }
-
-  // Like operations
-  async likePost(userId: string, postId: string): Promise<void> {
-    const key = `${userId}-${postId}`;
-    if (!this.likes.has(key)) {
-      this.likes.set(key, {
-        id: randomUUID(),
-        userId,
-        postId,
-      });
-    }
-  }
-
-  async unlikePost(userId: string, postId: string): Promise<void> {
-    const key = `${userId}-${postId}`;
-    this.likes.delete(key);
-  }
-
-  async isLiked(userId: string, postId: string): Promise<boolean> {
-    const key = `${userId}-${postId}`;
-    return this.likes.has(key);
-  }
-
-  async getLikeCount(postId: string): Promise<number> {
-    return Array.from(this.likes.values()).filter((l) => l.postId === postId).length;
-  }
-
-  // Comment operations
-  async createComment(userId: string, postId: string, insertComment: InsertComment): Promise<Comment> {
-    const id = randomUUID();
-    const comment: Comment = {
-      id,
-      userId,
-      postId,
-      text: insertComment.text,
-      createdAt: new Date().toISOString(),
-    };
-    this.comments.set(id, comment);
-    return comment;
-  }
-
-  async getComments(postId: string): Promise<CommentWithUser[]> {
-    const comments = Array.from(this.comments.values())
-      .filter((c) => c.postId === postId)
-      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-
-    const result: CommentWithUser[] = [];
-    for (const comment of comments) {
-      const user = await this.getUser(comment.userId);
-      if (user) {
-        result.push({
-          ...comment,
-          username: user.username,
-        });
-      }
-    }
-    return result;
-  }
-
-  async getCommentCount(postId: string): Promise<number> {
-    return Array.from(this.comments.values()).filter((c) => c.postId === postId).length;
-  }
-
-  // Profile
-  async getUserProfile(username: string, currentUserId: string): Promise<UserProfile | undefined> {
-    const user = await this.getUserByUsername(username);
-    if (!user) return undefined;
-
-    const posts = await this.getPostsByUser(user.id, currentUserId);
-    
-    return {
-      id: user.id,
-      username: user.username,
-      postCount: posts.length,
-      followerCount: await this.getFollowerCount(user.id),
-      followingCount: await this.getFollowingCount(user.id),
-      isFollowing: await this.isFollowing(currentUserId, user.id),
-      posts,
-    };
+async function follow(followerId: string, followingId: string): Promise<void> {
+  if (followerId === followingId) return;
+  const key = `${followerId}-${followingId}`;
+  if (!follows.has(key)) {
+    follows.set(key, {
+      id: randomUUID(),
+      followerId,
+      followingId,
+    });
   }
 }
 
-export const storage = new MemStorage();
+async function unfollow(followerId: string, followingId: string): Promise<void> {
+  const key = `${followerId}-${followingId}`;
+  follows.delete(key);
+}
+
+async function isFollowing(followerId: string, followingId: string): Promise<boolean> {
+  const key = `${followerId}-${followingId}`;
+  return follows.has(key);
+}
+
+async function getFollowerCount(userId: string): Promise<number> {
+  return Array.from(follows.values()).filter((f) => f.followingId === userId).length;
+}
+
+async function getFollowingCount(userId: string): Promise<number> {
+  return Array.from(follows.values()).filter((f) => f.followerId === userId).length;
+}
+
+async function likePost(userId: string, postId: string): Promise<void> {
+  const key = `${userId}-${postId}`;
+  if (!likes.has(key)) {
+    likes.set(key, {
+      id: randomUUID(),
+      userId,
+      postId,
+    });
+  }
+}
+
+async function unlikePost(userId: string, postId: string): Promise<void> {
+  const key = `${userId}-${postId}`;
+  likes.delete(key);
+}
+
+async function createComment(userId: string, postId: string, insertComment: InsertComment): Promise<Comment> {
+  const id = randomUUID();
+  const comment: Comment = {
+    id,
+    userId,
+    postId,
+    text: insertComment.text,
+    createdAt: new Date().toISOString(),
+  };
+  comments.set(id, comment);
+  return comment;
+}
+
+async function getComments(postId: string): Promise<CommentWithUser[]> {
+  const postComments = Array.from(comments.values())
+    .filter((c) => c.postId === postId)
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+
+  const result: CommentWithUser[] = [];
+  for (const comment of postComments) {
+    const user = await getUser(comment.userId);
+    if (user) {
+      result.push({
+        ...comment,
+        username: user.username,
+        avatarUrl: user.avatarUrl,
+      });
+    }
+  }
+  return result;
+}
+
+async function getUserProfile(username: string, currentUserId: string): Promise<UserProfile | undefined> {
+  const user = await getUserByUsername(username);
+  if (!user) return undefined;
+
+  const posts = await getPostsByUser(user.id, currentUserId);
+
+  return {
+    id: user.id,
+    username: user.username,
+    avatarUrl: user.avatarUrl,
+    postCount: posts.length,
+    followerCount: await getFollowerCount(user.id),
+    followingCount: await getFollowingCount(user.id),
+    isFollowing: await isFollowing(currentUserId, user.id),
+    posts,
+  };
+}
+
+async function searchUsers(query: string): Promise<{ id: string; username: string; postCount: number; followerCount: number }[]> {
+  const foundUsers = Array.from(users.values())
+    .filter((user) => user.username.toLowerCase().includes(query.toLowerCase()));
+
+  const results = [];
+  for (const user of foundUsers) {
+    const postCount = Array.from(posts.values()).filter((p) => p.userId === user.id).length;
+    const followerCount = await getFollowerCount(user.id);
+    results.push({
+      id: user.id,
+      username: user.username,
+      postCount,
+      followerCount,
+    });
+  }
+  return results;
+}
+
+// Export a single object to maintain compatibility with consumers
+export const storage = {
+  getUser,
+  getUserByUsername,
+  createUser,
+  createPost,
+  getPost,
+  getPostWithDetails,
+  getPostsByUser,
+  getFeed,
+  follow,
+  unfollow,
+  isFollowing,
+  getFollowerCount,
+  getFollowingCount,
+  getFollowing,
+  likePost,
+  unlikePost,
+  isLiked,
+  getLikeCount,
+  createComment,
+  getComments,
+  getCommentCount,
+  getUserProfile,
+  searchUsers
+};

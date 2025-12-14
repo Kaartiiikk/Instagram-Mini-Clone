@@ -1,4 +1,5 @@
 import type { Express, Request, Response, NextFunction } from "express";
+import { seed } from "../script/seed";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import bcrypt from "bcryptjs";
@@ -27,12 +28,21 @@ function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
     return res.status(401).json({ message: "Invalid token" });
   }
 }
-
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
-  
+
+  // Seed route (dev only ideally, but keeping open for demo)
+  app.post("/api/seed", async (req: Request, res: Response) => {
+    try {
+      await seed();
+      res.json({ message: "Seeding complete" });
+    } catch (error) {
+      res.status(500).json({ message: "Seeding failed" });
+    }
+  });
+
   // Auth routes
   app.post("/api/auth/signup", async (req: Request, res: Response) => {
     try {
@@ -42,7 +52,7 @@ export async function registerRoutes(
       }
 
       const { username, password } = parseResult.data;
-      
+
       const existingUser = await storage.getUserByUsername(username);
       if (existingUser) {
         return res.status(400).json({ message: "Username already taken" });
@@ -55,7 +65,7 @@ export async function registerRoutes(
 
       res.json({
         token,
-        user: { id: user.id, username: user.username },
+        user: { id: user.id, username: user.username, avatarUrl: user.avatarUrl },
       });
     } catch (error) {
       res.status(500).json({ message: "Server error" });
@@ -65,26 +75,31 @@ export async function registerRoutes(
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
       const { username, password } = req.body;
-      
+      console.log(`Login attempt for: ${username}`);
+
       if (!username || !password) {
         return res.status(400).json({ message: "Username and password required" });
       }
 
       const user = await storage.getUserByUsername(username);
       if (!user) {
+        console.log(`User not found: ${username}`);
         return res.status(401).json({ message: "Invalid credentials" });
       }
+      console.log(`User found: ${user.username}, storing hash starting with: ${user.password.substring(0, 10)}...`);
 
       const validPassword = await bcrypt.compare(password, user.password);
       if (!validPassword) {
+        console.log(`Password mismatch for user: ${username}`);
         return res.status(401).json({ message: "Invalid credentials" });
       }
+      console.log(`Login successful for: ${username}`);
 
       const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: "7d" });
 
       res.json({
         token,
-        user: { id: user.id, username: user.username },
+        user: { id: user.id, username: user.username, avatarUrl: user.avatarUrl },
       });
     } catch (error) {
       res.status(500).json({ message: "Server error" });
@@ -175,7 +190,7 @@ export async function registerRoutes(
 
       const comment = await storage.createComment(req.userId!, req.params.id, parseResult.data);
       const user = await storage.getUser(req.userId!);
-      
+
       res.json({
         ...comment,
         username: user?.username,
@@ -198,6 +213,20 @@ export async function registerRoutes(
     }
   });
 
+  // Search route
+  app.get("/api/search", authMiddleware, async (req: AuthRequest, res: Response) => {
+    try {
+      const query = req.query.q as string;
+      if (!query || query.trim().length === 0) {
+        return res.json([]);
+      }
+      const results = await storage.searchUsers(query.trim());
+      res.json(results);
+    } catch (error) {
+      res.status(500).json({ message: "Server error" });
+    }
+  });
+
   // Follow routes
   app.post("/api/users/:username/follow", authMiddleware, async (req: AuthRequest, res: Response) => {
     try {
@@ -205,7 +234,7 @@ export async function registerRoutes(
       if (!targetUser) {
         return res.status(404).json({ message: "User not found" });
       }
-      
+
       if (targetUser.id === req.userId) {
         return res.status(400).json({ message: "Cannot follow yourself" });
       }

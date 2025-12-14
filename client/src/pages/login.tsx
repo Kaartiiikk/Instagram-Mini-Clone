@@ -41,7 +41,7 @@ export default function Login() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="w-full max-w-sm">
-        <h1 className="text-2xl font-bold mb-6 text-center" data-testid="text-login-title">Mini-Instagram</h1>
+        <h1 className="text-2xl font-bold mb-6 text-center" data-testid="text-login-title">Login</h1>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm mb-1">Username</label>

@@ -2,9 +2,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "wouter";
 import { apiRequest } from "@/lib/api";
 import { getUser } from "@/lib/auth";
-import { UserProfile, PostWithDetails } from "@shared/schema";
+import { UserProfile } from "@shared/schema";
 import PostCard from "@/components/post-card";
 import NavBar from "@/components/nav-bar";
+import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
 export default function Profile() {
   const { username } = useParams<{ username: string }>();
@@ -88,23 +89,31 @@ export default function Profile() {
       <NavBar />
       <div className="max-w-xl mx-auto p-4">
         <div className="mb-6 pb-4 border-b border-border">
-          <div className="flex items-center justify-between gap-4 mb-4">
-            <h1 className="text-xl font-bold" data-testid="text-profile-username">@{profile.username}</h1>
-            {!isOwnProfile && (
-              <button
-                onClick={handleFollowToggle}
-                disabled={followMutation.isPending || unfollowMutation.isPending}
-                className="px-4 py-1 bg-secondary text-secondary-foreground rounded-md text-sm"
-                data-testid="button-follow"
-              >
-                {profile.isFollowing ? "Unfollow" : "Follow"}
-              </button>
-            )}
-          </div>
-          <div className="flex gap-6 text-sm">
-            <span data-testid="text-post-count"><strong>{profile.postCount}</strong> posts</span>
-            <span data-testid="text-follower-count"><strong>{profile.followerCount}</strong> followers</span>
-            <span data-testid="text-following-count"><strong>{profile.followingCount}</strong> following</span>
+          <div className="flex items-center gap-4 mb-4">
+            <Avatar className="h-20 w-20 border-2 border-background ring-2 ring-border">
+              <AvatarImage src={profile.avatarUrl} alt={profile.username} />
+              <AvatarFallback className="text-2xl">{profile.username[0].toUpperCase()}</AvatarFallback>
+            </Avatar>
+            <div className="flex-1">
+              <div className="flex items-center justify-between gap-4">
+                <h1 className="text-xl font-bold" data-testid="text-profile-username">@{profile.username}</h1>
+                {!isOwnProfile && (
+                  <button
+                    onClick={handleFollowToggle}
+                    disabled={followMutation.isPending || unfollowMutation.isPending}
+                    className="px-4 py-1 bg-secondary text-secondary-foreground rounded-md text-sm"
+                    data-testid="button-follow"
+                  >
+                    {profile.isFollowing ? "Unfollow" : "Follow"}
+                  </button>
+                )}
+              </div>
+              <div className="flex gap-6 text-sm mt-2">
+                <span data-testid="text-post-count"><strong>{profile.postCount}</strong> posts</span>
+                <span data-testid="text-follower-count"><strong>{profile.followerCount}</strong> followers</span>
+                <span data-testid="text-following-count"><strong>{profile.followingCount}</strong> following</span>
+              </div>
+            </div>
           </div>
         </div>
 

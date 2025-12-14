@@ -12,7 +12,7 @@ export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
 
-export function getUser(): { id: string; username: string } | null {
+export function getUser(): { id: string; username: string; avatarUrl?: string } | null {
   const user = localStorage.getItem(USER_KEY);
   return user ? JSON.parse(user) : null;
 }

@@ -5,11 +5,13 @@ export interface User {
   id: string;
   username: string;
   password: string;
+  avatarUrl?: string; // Add avatarUrl
 }
 
 export const insertUserSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters"),
   password: z.string().min(6, "Password must be at least 6 characters"),
+  avatarUrl: z.string().url().optional(), // Add optional validation
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -60,8 +62,10 @@ export const insertCommentSchema = z.object({
 export type InsertComment = z.infer<typeof insertCommentSchema>;
 
 // API response types
+// API response types
 export interface PostWithDetails extends Post {
   username: string;
+  avatarUrl?: string;
   likeCount: number;
   commentCount: number;
   isLiked: boolean;
@@ -70,6 +74,7 @@ export interface PostWithDetails extends Post {
 export interface UserProfile {
   id: string;
   username: string;
+  avatarUrl?: string;
   postCount: number;
   followerCount: number;
   followingCount: number;
@@ -79,9 +84,11 @@ export interface UserProfile {
 
 export interface CommentWithUser extends Comment {
   username: string;
+  avatarUrl?: string;
 }
 
+// ... existing imports ...
 export interface AuthResponse {
   token: string;
-  user: { id: string; username: string };
+  user: { id: string; username: string; avatarUrl?: string };
 }

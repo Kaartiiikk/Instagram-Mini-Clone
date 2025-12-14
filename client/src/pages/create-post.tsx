@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/api";
 import { Post } from "@shared/schema";
 import NavBar from "@/components/nav-bar";
 
 export default function CreatePost() {
   const [, setLocation] = useLocation();
+  const queryClient = useQueryClient();
   const [imageUrl, setImageUrl] = useState("");
   const [caption, setCaption] = useState("");
   const [error, setError] = useState("");
@@ -14,6 +15,8 @@ export default function CreatePost() {
   const createMutation = useMutation({
     mutationFn: () => apiRequest<Post>("POST", "/api/posts", { imageUrl, caption }),
     onSuccess: () => {
+      // Invalidate feed query to refresh the feed with the new post
+      queryClient.invalidateQueries({ queryKey: ["/api/feed"] });
       setLocation("/");
     },
     onError: (err: Error) => {
