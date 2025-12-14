@@ -135,9 +135,4 @@ You can use these pre-created accounts to log in:
 ├── script/                 # Helper scripts
 │   └── seed.ts             # Data seeding logic
 ├── README.md               # This file
-└── SETUP_GUIDE.md          # Setup instructions
 ```
-
-## License
-
-MIT
